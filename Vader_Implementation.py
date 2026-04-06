@@ -1,99 +1,128 @@
-import requests
-import pandas as pd
+import os
 import time
-import seaborn as sns
-import matplotlib.pyplot as plt
-
+import kagglehub
+import pandas as pd
+import requests
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 from sklearn.linear_model import LogisticRegression
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import cross_val_score, KFold
 
-
-# SETUP
+# ---------------------------------------------------------
+# 1. SETUP & UTILITIES
+# ---------------------------------------------------------
 api_key = "R3bsyQSAMqdbkTHIUAzW3PgLFBdbqHRiOGGzdWPaOzyJHout"
 analyzer = SentimentIntensityAnalyzer()
 
-def get_vader_score(text):
-    if not text:return 0
-    return analyzer.polarity_scores(text)['compound']
+def clean_title(title):
+    if not isinstance(title, str): return ""
+    t = title.split(':')[0].split(' - ')[0].upper().strip()
+    for word in ["THE ", "A ", "AN "]:
+        if t.startswith(word): t = t[len(word):]
+    return "".join(c for c in t if c.isalnum() or c.isspace()).strip()
 
-# Data Collection: Success Group
-nyt_url = url = f"https://api.nytimes.com/svc/books/v3/lists/overview.json?api-key={api_key}"
-data = requests.get(nyt_url).json()
+# ---------------------------------------------------------
+# 2. SUCCESS LIST (Historical 2010-2014)
+# ---------------------------------------------------------
+years = range(2010, 2015)
+months = ["01", "07"] 
+nyt_titles = set()
 
-success_data =[]
-for lst in data['results']['lists']:
-    for book in lst['books']:
-        success_data.append({
-            'title': book['title'],
-            'description': book['description'],
-            'label': 1 # Class 1: Success
-        })
+print(f"📡 Building Success Pool (2010-2014)...")
+for year in years:
+    for month in months:
+        date = f"{year}-{month}-01"
+        url = f"https://api.nytimes.com/svc/books/v3/lists/full-overview.json?published_date={date}&api-key={api_key}"
+        try:
+            res = requests.get(url).json()
+            if 'results' in res:
+                for lst in res['results']['lists']:
+                    for b in lst['books']:
+                        nyt_titles.add(clean_title(b['title']))
+            time.sleep(6) 
+        except: pass
+print(f"✅ Success Pool: {len(nyt_titles)} titles.")
 
-# Data Collection: Other Group
-success_count = len(success_data)
-google_url = f"https://www.googleapis.com/books/v1/volumes?q=subject:fiction&maxResults={min(success_count, 40)}"
-google_res = requests.get(google_url).json()
+# ---------------------------------------------------------
+# 3. MEMORY-SAFE CHUNKING (3GB Dataset)
+# ---------------------------------------------------------
+print("📥 Downloading 3GB Amazon dataset...")
+path = kagglehub.dataset_download("mohamedbakhet/amazon-books-reviews")
+csv_path = os.path.join(path, "Books_rating.csv")
 
-def get_more_google_books(target_count):
-    other_books = []
-    # Loop until we have enough books or run out of results
-    for i in range(0, target_count, 40):
-        print(f"Fetching Google Books starting at index {i}...")
-        url = f"https://www.googleapis.com/books/v1/volumes?q=subject:fiction&startIndex={i}&maxResults=40"
-        res = requests.get(url).json()
-        
-        if 'items' not in res:
-            break
-            
-        for item in res['items']:
-            info = item.get('volumeInfo', {})
-            desc = info.get('description', '')
-            if desc: # Only keep books with descriptions for VADER
-                other_books.append({
-                    'title': info.get('title', '').upper(),
-                    'description': desc,
-                    'label': 0  # 0 = Other [cite: 113]
-                })
-        
-        time.sleep(1) # Small pause to be nice to the API
-        
-    return pd.DataFrame(other_books)
+success_rows = []
+other_rows = []
+target_success_count = 400 # Aiming for a larger sample size
 
-other_df = get_more_google_books(230)
-success_df = pd.DataFrame(success_data)
+print("📂 Processing 3GB file in chunks...")
+for chunk in pd.read_csv(csv_path, chunksize=100000): # Larger chunks for efficiency
+    chunk['clean_name'] = chunk['Title'].apply(clean_title)
+    
+    # Identify matches
+    matches = chunk[chunk['clean_name'].isin(nyt_titles)]
+    success_rows.append(matches)
+    
+    # Collect "Other" samples
+    if len(other_rows) < (target_success_count * 5):
+        others = chunk[~chunk['clean_name'].isin(nyt_titles)].sample(min(500, len(chunk)))
+        other_rows.append(others)
+    
+    found = pd.concat(success_rows)['clean_name'].nunique() if success_rows else 0
+    print(f"   ...Found {found} unique Bestsellers", end='\r')
+    
+    if found >= target_success_count:
+        break
 
-raw_df = pd.concat([success_df, other_df])
+df_filtered = pd.concat(success_rows + other_rows)
 
-# Balance to a perfect 1:1 ratio based on your 'Other' count (97)
-count_other = len(other_df)
-balanced_success = raw_df[raw_df['label'] == 1].sample(n=count_other, random_state=42)
-balanced_other = raw_df[raw_df['label'] == 0]
+# ---------------------------------------------------------
+# 4. FEATURE ENGINEERING: ADDING VOLUME
+# ---------------------------------------------------------
+print("\n🧪 Calculating Sentiment & Review Volume...")
+df_filtered['sentiment'] = df_filtered['review/text'].apply(lambda x: analyzer.polarity_scores(str(x))['compound'])
 
-# Create your final balanced dataframe
-df = pd.concat([balanced_success, balanced_other]).sample(frac=1).reset_index(drop=True)
-print(f"New Balanced Dataset Size: {len(df)} books")
-df['sentiment'] = df['description'].apply(get_vader_score)
+# Aggregating: Sentiment, Rating, and the all-important Review Count
+book_data = df_filtered.groupby('clean_name').agg({
+    'sentiment': 'mean',
+    'review/score': 'mean',
+    'Title': 'count' # Using count of reviews as a Volume Signal
+}).rename(columns={'Title': 'review_count'}).reset_index()
 
-X = df[['sentiment']].values
-y = df['label'].values
+book_data['label'] = book_data['clean_name'].apply(lambda x: 1 if x in nyt_titles else 0)
 
-scaler = StandardScaler()
-X_scaled = scaler.fit_transform(X)
+# Balancing the classes (1:1 Ratio)
+success_grp = book_data[book_data['label'] == 1]
+other_grp = book_data[book_data['label'] == 0]
 
-model = LogisticRegression()
-kfold = KFold(n_splits=10, shuffle=True, random_state=42)
-results = cross_val_score(model, X_scaled, y, cv=kfold)
+sample_size = min(len(success_grp), len(other_grp))
+df_balanced = pd.concat([
+    success_grp.sample(n=sample_size, random_state=42),
+    other_grp.sample(n=sample_size, random_state=42)
+]).sample(frac=1).reset_index(drop=True)
 
+print(f"✅ Balanced Dataset: {len(df_balanced)} books ({sample_size} per class)")
 
-print(f"Dataset Size: {len(df)} books ({len(balanced_success)} Success, {len(balanced_other)} Other)")
-print(f"Average Accuracy (10-fold): {results.mean():.2f}")
+# ---------------------------------------------------------
+# 5. MODELING & CROSS-VALIDATION
+# ---------------------------------------------------------
+if len(df_balanced) >= 50:
+    # Features: Sentiment Intensity, Average Rating, and Review Volume
+    X = df_balanced[['sentiment', 'review/score', 'review_count']].values
+    y = df_balanced['label'].values
+    
+    # Standardizing is crucial when features like 'review_count' have large ranges
+    X_scaled = StandardScaler().fit_transform(X)
 
-# Visualisation
-plt.figure(figsize=(10, 6))
-sns.kdeplot(data=df, x='sentiment', hue='label', fill=True, common_norm=False)
-plt.title("Sentiment Density: Success vs. Other")
-plt.xlabel("VADER Compound Score")
-plt.ylabel("Density")
-plt.show()
+    model = LogisticRegression()
+    kfold = KFold(n_splits=10, shuffle=True, random_state=42)
+    results = cross_val_score(model, X_scaled, y, cv=kfold)
+
+    print(f"\n📊 FINAL RESULTS")
+    print(f"Average Accuracy: {results.mean():.2f}")
+    print(f"Target Benchmark: 0.75")
+    
+    # Optional: Print feature coefficients to see which matters most
+    model.fit(X_scaled, y)
+    print(f"Feature Weights (S, R, V): {model.coef_[0]}")
+else:
+    print("❌ Match count still too low.")
