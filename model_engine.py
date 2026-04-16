@@ -2,7 +2,7 @@
 import pandas as pd
 from sklearn.linear_model import LogisticRegression
 from sklearn.preprocessing import StandardScaler
-from sklearn.model_selection import cross_val_score, KFold
+from sklearn.model_selection import cross_validate, KFold
 
 def run_logistic_regression(book_data):
     """Trains a classifier on a balanced database (1:1 ratio)."""
@@ -23,7 +23,22 @@ def run_logistic_regression(book_data):
 
     model = LogisticRegression()
     kfold = KFold(n_splits=10, shuffle=True, random_state=42)
-    results = cross_val_score(model, X_scaled, y, cv=kfold)
+    model = LogisticRegression()
+    kfold = KFold(n_splits=10, shuffle=True, random_state=42)
+    
+    # NEW: Specify multiple metrics to calculate
+    scoring = ['accuracy', 'precision', 'recall']
+    results = cross_validate(model, X_scaled, y, cv=kfold, scoring=scoring)
+    
+    # Extract the means for your table
+    acc = results['test_accuracy'].mean()
+    prec = results['test_precision'].mean()
+    rec = results['test_recall'].mean()
+    
+    print(f"\n📊 REAL MODEL METRICS")
+    print(f"Accuracy: {acc:.2f}")
+    print(f"Precision: {prec:.2f}")
+    print(f"Recall: {rec:.2f}")
     
     model.fit(X_scaled, y)
-    return results.mean(), model.coef_[0], features, df_balanced
+    return acc, prec, rec, model.coef_[0], features, df_balanced, model, X_scaled, y
