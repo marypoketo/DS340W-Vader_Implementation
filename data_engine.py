@@ -31,7 +31,7 @@ def build_success_pool(api_key):
             except: pass
     return nyt_titles
 
-def process_amazon_chunks(nyt_titles, target_success=400):
+def process_amazon_chunks(nyt_titles, target_success=400, max_bow = 50):
     """Memory-safe extraction and feature engineering."""
     path = kagglehub.dataset_download("mohamedbakhet/amazon-books-reviews")
     csv_path = os.path.join(path, "Books_rating.csv")
@@ -70,14 +70,20 @@ def process_amazon_chunks(nyt_titles, target_success=400):
     }).rename(columns={'Title': 'review_count'}).reset_index()
 
     # 4. EXTRACT BoW FEATURES
-    print("🧪 Extracting BoW Vocabulary...")
-    vectorizer = CountVectorizer(max_features=500, stop_words=custom_stop_words)
-    bow_matrix = vectorizer.fit_transform(book_stats['review/text'])
-    bow_df = pd.DataFrame(bow_matrix.toarray(), columns=vectorizer.get_feature_names_out())
+    if max_bow > 0:
+        print(f"🧪 Extracting {max_bow}-Word Vocabulary...")
+        vectorizer = CountVectorizer(max_features=max_bow, stop_words=custom_stop_words)
+        bow_matrix = vectorizer.fit_transform(book_stats['review/text'])
+        bow_df = pd.DataFrame(bow_matrix.toarray(), columns=vectorizer.get_feature_names_out())
+        
+        # Merge stats with vocabulary
+        book_data = pd.concat([book_stats.drop(columns=['review/text']), bow_df], axis=1)
+    else:
+        # This branch creates your "VADER-Only" baseline
+        print("🧪 Baseline Run: Skipping BoW (VADER Only)...")
+        book_data = book_stats.drop(columns=['review/text'])
 
-    # 5. FINAL MERGE
-    # Drop the raw text before returning to the model
-    book_data = pd.concat([book_stats.drop(columns=['review/text']), bow_df], axis=1)
+    # 5. LABELING (Applies to both branches)
     book_data['label'] = book_data['clean_name'].apply(lambda x: 1 if x in nyt_titles else 0)
     
     return book_data
