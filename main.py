@@ -6,21 +6,21 @@ from model_engine import run_logistic_regression
 from visualizer import generate_research_plots
 
 def main():
-    load_dotenv(dotenv_path=".env")
-    api_key = os.getenv("NYT_API_KEY")
+    load_dotenv()
+    api_key = os.getenv("api_key")
     
-    print("📡 Step 1: Building Success Pool...")
+    print("📡 Stage 1: Building NYT Success Pool...")
     nyt_titles = build_success_pool(api_key)
     
-    print("📂 Step 2: Processing 3GB Amazon reviews...")
+    print("📂 Stage 2: Processing 3GB Amazon Dataset...")
     book_data = process_amazon_chunks(nyt_titles)
     
-    print("📊 Step 3: Training Model & Running 10-Fold CV...")
+    print("📊 Stage 3: Executing Logistic Regression (10-Fold CV)...")
     acc, weights, feats, df_balanced = run_logistic_regression(book_data)
     
-    print(f"✅ Final Research Accuracy: {acc:.2f}")
+    print(f"✅ Quantitative Accuracy: {acc:.2f}")
     
-    print("🎨 Step 4: Generating Visualization Artifacts...")
+    print("🎨 Stage 4: Generating Visualization Artifacts...")
     generate_research_plots(df_balanced, weights, feats)
 
 if __name__ == "__main__":
