@@ -50,8 +50,12 @@ Project Structure
 - .env: Stores the NYT API key (excluded from version control).
 
 Getting Started
-1. Add your NYT API Key to a .env file: NYT_API_KEY=your_key_here.
+1. Open main.py.
 
-2. Install requirements: pip install pandas scikit-learn vadersentiment seaborn kagglehub requests python-dotenv.
+2. Locate the line: api_key = "XXXXX".
 
-3. Run the pipeline: python main.py.
+3. Replace "XXXXX" with your valid New York Times Books API key.
+   
+4. Install requirements: pip install pandas scikit-learn vadersentiment seaborn kagglehub requests python-dotenv.
+
+5. Run the pipeline: python main.py.
