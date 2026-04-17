@@ -18,7 +18,7 @@ def run_logistic_regression(book_data):
     features = [col for col in df_balanced.columns if col not in ['clean_name', 'label']]
     X = df_balanced[features].values
     y = df_balanced['label'].values
-    # Standardization is imperative for Logistic Regression performance [cite: 232, 336]
+    # Standardization is imperative for Logistic Regression performance
     X_scaled = StandardScaler().fit_transform(X)
 
     model = LogisticRegression()

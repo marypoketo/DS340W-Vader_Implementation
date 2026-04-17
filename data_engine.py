@@ -92,11 +92,11 @@ def process_amazon_chunks(nyt_titles, target_success=400, max_bow = 50):
 def add_bow_features(df, max_features=100):
     """
     Extracts the most frequent words as new features 
-    to hit the 0.75 accuracy benchmark[cite: 28].
+    to hit the 0.75 accuracy benchmark.
     """
     # Initialize Vectorizer (removing English stopwords) 
     # Add custom "junk" words to the standard English stop_words list
-    junk_words = ['quot', 'don', 'br', 'book', 'read', 'just', 'like', 'really', 'good', 've']
+    junk_words = ['quot', 'don', 'br', 'book', 'read', 'just', 'like', 'really', 'good', 've', 'son']
     custom_stop_words = list(text.ENGLISH_STOP_WORDS) + junk_words
 
     # Use these words in your Vectorizer

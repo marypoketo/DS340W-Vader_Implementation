@@ -7,7 +7,7 @@ from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 
 def generate_research_plots(df_balanced, weights, features):
     # 1. Feature Importance: Show the Top 10 strongest predictors
-    # This makes the chart look like a 'discovery' [cite: 338, 349]
+    # This makes the chart look like a 'discovery'
     plt.figure(figsize=(12, 6))
     # Get the top 10 weights by absolute value
     top_indices = np.argsort(np.abs(weights))[-10:]
