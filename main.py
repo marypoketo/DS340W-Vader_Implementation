@@ -1,14 +1,12 @@
 # main.py
 import os
 import pandas as pd  # Added missing import
-from dotenv import load_dotenv
 from data_engine import build_success_pool, process_amazon_chunks
 from model_engine import run_logistic_regression
 from visualizer import generate_research_plots, generate_advanced_plots, plot_accuracy_comparison
 
 def main():
-    load_dotenv()
-    api_key = os.getenv("api_key")
+    api_key = "XXXXX"
     
     print("📡 Stage 1: Building NYT Success Pool...")
     nyt_titles = build_success_pool(api_key)
