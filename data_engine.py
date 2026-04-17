@@ -37,7 +37,7 @@ def process_amazon_chunks(nyt_titles, target_success=400, max_bow = 50):
     csv_path = os.path.join(path, "Books_rating.csv")
     
     success_rows, other_rows, found_titles = [], [], set()
-    for chunk in pd.read_csv(csv_path, chunksize=100000):
+    for chunk in pd.read_csv(csv_path, chunksize=200000):
         chunk['clean_name'] = chunk['Title'].apply(clean_title)
         matches = chunk[chunk['clean_name'].isin(nyt_titles)]
         if not matches.empty:
