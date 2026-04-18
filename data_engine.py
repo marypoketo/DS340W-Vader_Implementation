@@ -31,13 +31,14 @@ def build_success_pool(api_key):
             except: pass
     return nyt_titles
 
-def process_amazon_chunks(nyt_titles, target_success=400, max_bow = 50):
+def process_amazon_chunks(nyt_titles, target_success=400, max_bow=50):
     """Memory-safe extraction and feature engineering."""
     path = kagglehub.dataset_download("mohamedbakhet/amazon-books-reviews")
     csv_path = os.path.join(path, "Books_rating.csv")
     
     success_rows, other_rows, found_titles = [], [], set()
-    for chunk in pd.read_csv(csv_path, chunksize=200000):
+    # LOWERED CHUNKSIZE for cross-platform stability
+    for chunk in pd.read_csv(csv_path, chunksize=20000):
         chunk['clean_name'] = chunk['Title'].apply(clean_title)
         matches = chunk[chunk['clean_name'].isin(nyt_titles)]
         if not matches.empty:
@@ -50,24 +51,28 @@ def process_amazon_chunks(nyt_titles, target_success=400, max_bow = 50):
 
     df_filtered = pd.concat(success_rows + other_rows)
     
-    # 1. RESTORE SENTIMENT CALCULATION (Fixes the KeyError)
-    print("🧪 Calculating Sentiment Scores...")
+    # 1. THE STRING SHIELD & FEATURE CALCULATION
+    print("🧹 Cleaning text artifacts & Calculating Features...")
+    df_filtered['review/text'] = df_filtered['review/text'].fillna('').astype(str)
+    df_filtered['review_length'] = df_filtered['review/text'].apply(len) # Added this!
+    
     df_filtered['sentiment'] = df_filtered['review/text'].apply(
-        lambda x: analyzer.polarity_scores(str(x))['compound']
+        lambda x: analyzer.polarity_scores(x)['compound']
     )
     
-    # 2. DEFINE NOISE FILTER (Ensures 'quot' is removed)
-    junk_words = ['quot', 'don', 'br', 'book', 'read', 'just', 'really', 've', 'like', 'good', 'story']
-    custom_stop_words = list(text.ENGLISH_STOP_WORDS) + junk_words
-
-    # 3. GROUP REVIEWS (Reception Depth)
-    # We group once to keep all stats and text aligned
+    # 2. GROUPING (ONE TIME ONLY)
+    # This keeps all your features (sentiment, score, count, length) in one place
     book_stats = df_filtered.groupby('clean_name').agg({
-        'sentiment': 'mean', 
-        'review/score': 'mean', 
+        'sentiment': 'mean',
+        'review/score': 'mean',
         'Title': 'count',
-        'review/text': lambda x: ' '.join(str(i) for i in x)
+        'review_length': 'mean',
+        'review/text': lambda x: ' '.join(x) 
     }).rename(columns={'Title': 'review_count'}).reset_index()
+    
+    # 3. DEFINE NOISE FILTER
+    junk_words = ['quot', 'don', 'br', 'book', 'read', 'just', 'really', 've', 'like', 'good', 'story', 'son']
+    custom_stop_words = list(text.ENGLISH_STOP_WORDS) + junk_words
 
     # 4. EXTRACT BoW FEATURES
     if max_bow > 0:
@@ -76,14 +81,12 @@ def process_amazon_chunks(nyt_titles, target_success=400, max_bow = 50):
         bow_matrix = vectorizer.fit_transform(book_stats['review/text'])
         bow_df = pd.DataFrame(bow_matrix.toarray(), columns=vectorizer.get_feature_names_out())
         
-        # Merge stats with vocabulary
         book_data = pd.concat([book_stats.drop(columns=['review/text']), bow_df], axis=1)
     else:
-        # This branch creates your "VADER-Only" baseline
         print("🧪 Baseline Run: Skipping BoW (VADER Only)...")
         book_data = book_stats.drop(columns=['review/text'])
 
-    # 5. LABELING (Applies to both branches)
+    # 5. LABELING
     book_data['label'] = book_data['clean_name'].apply(lambda x: 1 if x in nyt_titles else 0)
     
     return book_data
