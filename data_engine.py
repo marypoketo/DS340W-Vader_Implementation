@@ -45,7 +45,7 @@ def process_amazon_chunks(nyt_titles, target_success=400, max_bow=50):
             success_rows.append(matches)
             found_titles.update(matches['clean_name'].unique())
         if len(other_rows) < (target_success * 5):
-            others = chunk[~chunk['clean_name'].isin(nyt_titles)].sample(min(500, len(chunk)))
+            others = chunk[~chunk['clean_name'].isin(nyt_titles)].sample(min(500, len(chunk)), random_state=42)
             other_rows.append(others)
         if len(found_titles) >= target_success: break
 
