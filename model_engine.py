@@ -10,10 +10,7 @@ def run_logistic_regression(book_data):
     other = book_data[book_data['label'] == 0]
     
     sample_size = min(len(success), len(other))
-    df_balanced = pd.concat([
-        success.sample(n=sample_size, random_state=42),
-        other.sample(n=sample_size, random_state=42)
-    ]).sample(frac=1).reset_index(drop=True)
+    df_balanced = pd.concat([...]).sample(frac=1, random_state=42).reset_index(drop=True)
 
     features = [col for col in df_balanced.columns if col not in ['clean_name', 'label']]
     X = df_balanced[features].values
@@ -21,9 +18,9 @@ def run_logistic_regression(book_data):
     # Standardization is imperative for Logistic Regression performance
     X_scaled = StandardScaler().fit_transform(X)
 
-    model = LogisticRegression()
+    model = LogisticRegression(random_state=42)
     kfold = KFold(n_splits=10, shuffle=True, random_state=42)
-    model = LogisticRegression()
+    model = LogisticRegression(random_state=42)
     kfold = KFold(n_splits=10, shuffle=True, random_state=42)
     
     # NEW: Specify multiple metrics to calculate
